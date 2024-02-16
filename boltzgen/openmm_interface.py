@@ -2,6 +2,7 @@ from simtk import openmm as mm
 from simtk.openmm import app
 from simtk import unit
 import torch
+import copy
 import numpy as np
 
 
@@ -102,7 +103,7 @@ class OpenMMEnergyInterfaceParallel(torch.autograd.Function):
         return energy, force
 
     @staticmethod
-    def forward(ctx, input, pool):
+    def forward(input, pool):
         device = input.device
         input_np = input.cpu().detach().numpy()
         energies_out, forces_out = zip(*pool.map(
@@ -113,12 +114,33 @@ class OpenMMEnergyInterfaceParallel(torch.autograd.Function):
         forces = torch.from_numpy(forces_np)
         energies = energies.type(input.dtype)
         forces = forces.type(input.dtype)
-        # Save the forces for the backward step, uploading to the gpu if needed
-        ctx.save_for_backward(forces.to(device=device))
-        return energies.to(device=device)
+        return energies.to(device=device), forces.to(device=device)
 
     @staticmethod
-    def backward(ctx, grad_output):
+    def vmap(info, in_dims, input, pool):
+        batch_size = info.batch_size
+        in_dim_input, in_dim_pool = in_dims
+
+        assert in_dim_pool is None
+
+        orig_shape = copy.deepcopy(input.shape)
+        input = input.flatten(in_dim_input, in_dim_input + 1)
+        energies, forces = OpenMMEnergyInterfaceParallel.forward(input, pool)
+
+        energies = energies.reshape(*orig_shape[:2], -1)
+        forces = forces.reshape(*orig_shape[:2], -1)
+
+        return (energies, forces), (in_dim_input, in_dim_input)
+
+    @staticmethod
+    # inputs is a Tuple of all of the inputs passed to forward.
+    # output is the output of the forward().
+    def setup_context(ctx, inputs, output):
+        energies, forces = output
+        ctx.save_for_backward(forces)
+
+    @staticmethod
+    def backward(ctx, grad_output, grad_forces):
         forces, = ctx.saved_tensors
         return forces * grad_output, None, None
 

@@ -104,7 +104,7 @@ class BoltzmannParallel(nf.distributions.PriorDistribution):
         self.regularize_energy = omi.regularize_energy
 
         self.norm_energy = lambda pos: self.regularize_energy(
-            self.openmm_energy(pos, self.pool)[:, 0],
+            self.openmm_energy(pos, self.pool)[0][:, 0],
             self.energy_cut, self.energy_max)
 
     def log_prob(self, z):
@@ -146,7 +146,7 @@ class TransformedBoltzmannParallel(nn.Module):
         self.regularize_energy = omi.regularize_energy
 
         self.norm_energy = lambda pos: self.regularize_energy(
-            self.openmm_energy(pos, self.pool)[:, 0],
+            self.openmm_energy(pos, self.pool)[0][:, 0],
             self.energy_cut, self.energy_max)
 
         self.transform = transform
