@@ -193,8 +193,19 @@ class InternalCoordinateTransform(Transform):
         cart = x[:, self.init_cart_indices].view(n_batch, -1, 3)
 
         # Setup the log abs det jacobian
-        jac = x.new_zeros(x.shape[0])
-        self.angle_loss = torch.zeros_like(jac)
+        jac = x.new_zeros(x.shape[0], device=x.device)
+        self.angle_loss = torch.zeros_like(jac, device=x.device)
+
+        if self.std_bonds.device != x.device:
+            device = x.device
+            self.std_bonds = self.std_bonds.to(device)
+            self.mean_bonds = self.mean_bonds.to(device)
+
+            self.std_angles = self.std_angles.to(device)
+            self.mean_angles = self.mean_angles.to(device)
+
+            self.std_dih = self.std_dih.to(device)
+            self.mean_dih = self.mean_dih.to(device)
 
         # Loop over all of the blocks, where all of the atoms in each block
         # can be built in parallel because they only depend on atoms that
@@ -213,7 +224,7 @@ class InternalCoordinateTransform(Transform):
                 * self.std_bonds[self.atom_to_stats[atoms_to_build]]
                 + self.mean_bonds[self.atom_to_stats[atoms_to_build]]
             )
-            
+
             # Get all of the angles by retrieving the appropriate columns and
             # un-normalizing.
             angles = (
